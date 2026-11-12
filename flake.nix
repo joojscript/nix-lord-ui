@@ -66,6 +66,73 @@
       };
       nixosModules.lord-ui = self.nixosModules.default;
 
+      # A throwaway VM for bringing the desktop up without touching a real host.
+      # Build: nix build .#nixosConfigurations.test-vm.config.system.build.vm
+      # Run:   ./result/bin/run-lord-ui-vm-vm
+      nixosConfigurations.test-vm = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          self.nixosModules.default
+          ({ pkgs, lib, modulesPath, ... }: {
+            imports = [ "${modulesPath}/virtualisation/qemu-vm.nix" ];
+
+            system.stateVersion = "26.05";
+            networking.hostName = "lord-ui-vm";
+
+            users.users.lord = {
+              isNormalUser = true;
+              password = "lord";
+              extraGroups = [ "wheel" "video" "render" "input" ];
+            };
+            users.users.root.password = "root";
+
+            services.lord-ui = {
+              enable = true;
+              autologinUser = "lord";
+            };
+
+            # Give the VM a GPU path lord-server can composite on.
+            virtualisation = {
+              memorySize = 2048;
+              cores = 2;
+              qemu.options = [ "-vga virtio" ];
+            };
+
+            # Serial console (last console= wins as /dev/console) so a headless
+            # boot's logs land on stdio; tty1 stays a real VT for lord-server.
+            boot.kernelParams = [ "console=tty1" "console=ttyS0,115200" ];
+
+            # Automated self-test: after the desktop has had a moment to come up,
+            # report what happened on the serial console and power the VM off, so
+            # a CI-style `nix run`/qemu boot yields a pass/fail without a GUI.
+            systemd.services.lord-selftest = {
+              description = "Report lord-ui session state, then power off";
+              after = [ "lordos.service" ];
+              wants = [ "lordos.service" ];
+              wantedBy = [ "graphical.target" ];
+              serviceConfig.Type = "oneshot";
+              script = ''
+                sleep 25
+                exec > /dev/ttyS0 2>&1
+                echo "================ LORD-UI SELFTEST ================"
+                echo "## systemctl status lordos:"
+                systemctl status lordos --no-pager -l || true
+                echo "## lord-server processes:"
+                ${pkgs.procps}/bin/ps -eo pid,user,comm,args | grep -i 'lord-server\|lord-sessiond' | grep -v grep || echo "  (none)"
+                echo "## /run/lordos:"
+                ls -la /run/lordos 2>&1 || true
+                echo "## /dev/dri:"
+                ls -la /dev/dri 2>&1 || true
+                echo "## last 60 journal lines for lordos:"
+                journalctl -u lordos -u lord-selftest --no-pager -n 60 || true
+                echo "================ SELFTEST DONE ==================="
+                systemctl poweroff
+              '';
+            };
+          })
+        ];
+      };
+
       formatter = forAllSystems (system: (pkgsFor system).nixpkgs-fmt);
     };
 }
