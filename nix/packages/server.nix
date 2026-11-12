@@ -58,10 +58,13 @@ stdenv.mkDerivation {
     "WLPROTO=${wayland-protocols}/share/wayland-protocols"
   ];
 
-  # lord-netperm's cgroup BPF programs are built with `clang -target bpf`, which
-  # rejects the cc-wrapper's -fzero-call-used-regs=used-gpr hardening flag. The
-  # BPF target has no use for it; drop it for this derivation.
-  hardeningDisable = [ "zerocallusedregs" ];
+  # Two hardening flags the cc-wrapper injects break this source:
+  #   - zerocallusedregs: lord-netperm's cgroup BPF programs are built with
+  #     `clang -target bpf`, which rejects -fzero-call-used-regs=used-gpr.
+  #   - fortify: _FORTIFY_SOURCE=3 turns realpath() into __realpath_chk, which
+  #     aborts because lord-server passes a resolved-path buffer the compiler
+  #     cannot prove is >= PATH_MAX (e.g. pty_set_integration in term/pty.c).
+  hardeningDisable = [ "zerocallusedregs" "fortify" ];
 
   enableParallelBuilding = true;
 
