@@ -10,6 +10,7 @@
   libxkbcommon,
   libxcrypt,
   mesa,
+  libgbm,
   libglvnd,
   openssl,
   srtp,
@@ -44,6 +45,7 @@ stdenv.mkDerivation {
     libxkbcommon
     libxcrypt
     mesa
+    libgbm
     libglvnd
     openssl
     srtp
@@ -56,11 +58,34 @@ stdenv.mkDerivation {
     "WLPROTO=${wayland-protocols}/share/wayland-protocols"
   ];
 
+  # lord-netperm's cgroup BPF programs are built with `clang -target bpf`, which
+  # rejects the cc-wrapper's -fzero-call-used-regs=used-gpr hardening flag. The
+  # BPF target has no use for it; drop it for this derivation.
+  hardeningDisable = [ "zerocallusedregs" ];
+
   enableParallelBuilding = true;
+
+  # The desktop-essential targets. We deliberately skip the optional helpers
+  # that `all` also pulls in — RDP (needs FreeRDP), the VM guest agent (needs a
+  # static libc), TTS, the web-view helper, mail/sql/sftp — so the first-class
+  # desktop (compositor, shell, terminal, files, login/session, networking,
+  # per-app firewall, fan control, secret vault) builds cleanly with a lean
+  # closure. They can be added back behind options later.
+  lordTargets = [
+    "build/lord-server"
+    "build/lord-sessiond"
+    "build/lord-netd"
+    "build/lord-netperm"
+    "build/lord-fand"
+    "build/lord-pkexec"
+    "build/lord-vault"
+    "build/lordos-firstrun"
+    "build/lord-claude-status"
+  ];
 
   buildPhase = ''
     runHook preBuild
-    make -C server -j"$NIX_BUILD_CORES" $makeFlags
+    make -C server -j"$NIX_BUILD_CORES" $makeFlags $lordTargets
     runHook postBuild
   '';
 

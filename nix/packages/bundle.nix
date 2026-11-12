@@ -17,7 +17,7 @@ buildNpmPackage {
   src = lordosSrc;
 
   # Pure JS/esbuild build with vendored React deps; no network at build time.
-  npmDepsHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  npmDepsHash = "sha256-T1dCo70IOMe8nHoDUfApxez64uzd1lzAkMpSKmDUfBE=";
 
   # package.json "build" = `node tools/build-theme.mjs` (all themes).
   npmBuildScript = "build";
